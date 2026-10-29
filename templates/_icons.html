@@ -1,0 +1,25 @@
+{% macro icon(name) %}
+{% if name == 'card' %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="6" width="19" height="12" rx="1.2"/><line x1="5.5" y1="15" x2="11" y2="15"/><line x1="5.5" y1="12.2" x2="14.5" y2="12.2"/></svg>
+{% elif name == 'flyer' %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="2.5" width="14" height="19" rx="1"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="10.5" x2="16" y2="10.5"/><line x1="8" y1="14" x2="13" y2="14"/></svg>
+{% elif name == 'envelope' %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="5" width="19" height="14" rx="1"/><path d="M3 6l9 7 9-7"/></svg>
+{% elif name == 'folder' %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 6.5h6l2 2h10v10.5a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V7.5a1 1 0 0 1 1-1z"/></svg>
+{% elif name == 'poster' %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4.5" y="2.5" width="15" height="19" rx="0.6"/><circle cx="9.5" cy="8.5" r="1.6"/><path d="M6 15l3.5-3.5L12 14l3-3.5 3 4"/></svg>
+{% elif name == 'cheque' %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="6.5" width="19" height="11" rx="1"/><line x1="6" y1="15" x2="10" y2="15"/><circle cx="17" cy="12" r="2.1"/></svg>
+{% elif name == 'banner' %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 2.5h8v17l-4-2.5-4 2.5v-17z"/><line x1="6" y1="21" x2="18" y2="21"/></svg>
+{% elif name == 'sign' %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3.5" y="5" width="17" height="10.5" rx="0.8"/><line x1="12" y1="15.5" x2="12" y2="21"/><line x1="8.5" y1="21" x2="15.5" y2="21"/></svg>
+{% elif name == 'magnet' %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M7 3v8a5 5 0 0 0 10 0V3"/><line x1="7" y1="3" x2="10.5" y2="3"/><line x1="13.5" y1="3" x2="17" y2="3"/><line x1="7" y1="7.5" x2="10.2" y2="7.5"/><line x1="13.8" y1="7.5" x2="17" y2="7.5"/></svg>
+{% elif name == 'backdrop' %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="2.5" width="18" height="14" rx="0.6"/><line x1="8" y1="20.5" x2="8" y2="16.5"/><line x1="16" y1="20.5" x2="16" y2="16.5"/></svg>
+{% else %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5" y="3" width="14" height="18" rx="1"/><line x1="8.5" y1="8" x2="15.5" y2="8"/><line x1="8.5" y1="12" x2="15.5" y2="12"/></svg>
+{% endif %}
+{% endmacro %}

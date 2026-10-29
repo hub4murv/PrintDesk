@@ -1,0 +1,401 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+
+{% block title %}{{ product.category }} — PrintDesk{% endblock %}
+
+{% block content %}
+<div class="wrap breadcrumb">
+  <a href="{{ url_for('index') }}">All products</a> / {{ product.category }}
+</div>
+
+<div class="wrap product-layout">
+  {% set img = product_image(key) %}
+  <div class="product-visual{% if img %} has-image{% endif %}">
+    {% if img %}
+    <img src="{{ url_for('static', filename=img) }}" alt="{{ product.category }}" loading="lazy" decoding="async">
+    {% else %}
+    {{ icon(product.icon) }}
+    {% endif %}
+  </div>
+
+  <div class="product-info">
+    <h1>{{ product.category }}</h1>
+    <div class="tagline">{{ product.tagline }}</div>
+
+    {% if product.pricing_type != 'info_only' %}
+    <script>
+      // Defined up front (before the pricing-type scripts below) because some
+      // of them -- fixed_price in particular -- call this immediately on
+      // page load, before the shared script at the bottom of this template
+      // would otherwise have run.
+      async function postPrice(payload) {
+        const res = await fetch('/api/price', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        const valueEl = document.getElementById('price-value');
+        const noteEl = document.getElementById('price-note');
+        const errorEl = document.getElementById('price-error');
+        const uploadBtn = document.getElementById('upload-btn');
+        const uploadNote = document.getElementById('upload-note');
+
+        if (data.error) {
+          valueEl.textContent = '—';
+          noteEl.textContent = '';
+          errorEl.textContent = data.error;
+          if (uploadBtn) uploadBtn.disabled = true;
+        } else {
+          valueEl.textContent = `$${data.price} CAD`;
+          noteEl.textContent = data.note || '';
+          errorEl.textContent = '';
+          if (uploadBtn) uploadBtn.disabled = false;
+          if (uploadNote) uploadNote.textContent = '';
+        }
+      }
+    </script>
+    {% endif %}
+
+    {# ---------------- tiered_multi_variant : Business Cards, Postcard Flyers ---------------- #}
+    {% if product.pricing_type == 'tiered_multi_variant' %}
+      <div class="field">
+        <span class="field-label">Stock</span>
+        <div class="swatch-options" id="variant-options">
+          {% for vkey, v in product.variants.items() %}
+          <button type="button" class="swatch-btn" data-variant="{{ vkey }}">{{ v.label }}</button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="field" id="sides-field" style="display:none;">
+        <span class="field-label">Print sides</span>
+        <div class="swatch-options" id="sides-options"></div>
+      </div>
+
+      <div class="field">
+        <span class="field-label">Quantity</span>
+        <select id="qty-select"><option value="">Choose a stock first</option></select>
+      </div>
+
+      {% if product.addons %}
+      <div class="field">
+        {% for akey, a in product.addons.items() %}
+        <div class="checkbox-row">
+          <input type="checkbox" id="addon-{{ akey }}" data-addon="{{ akey }}">
+          <label for="addon-{{ akey }}">{{ a.label }} (+${{ a.price }})</label>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <script>
+        const PRODUCT = {{ product | tojson }};
+        const KEY = "{{ key }}";
+        const SIDE_LABELS = {"4/0": "Single-sided (4/0)", "4/4": "Double-sided (4/4)", "1_side": "1 side", "2_sides": "2 sides"};
+        let selectedVariant = null, selectedSides = null;
+
+        document.querySelectorAll('#variant-options .swatch-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('#variant-options .swatch-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            selectedVariant = btn.dataset.variant;
+            selectedSides = null;
+            onVariantChange();
+          });
+        });
+
+        function onVariantChange() {
+          const v = PRODUCT.variants[selectedVariant];
+          const sidesField = document.getElementById('sides-field');
+          const sidesOptions = document.getElementById('sides-options');
+          sidesOptions.innerHTML = '';
+
+          if (v.sides_pricing) {
+            sidesField.style.display = 'block';
+            Object.keys(v.sides_pricing).forEach(sk => {
+              const b = document.createElement('button');
+              b.type = 'button'; b.className = 'swatch-btn'; b.dataset.sides = sk;
+              b.textContent = SIDE_LABELS[sk] || sk;
+              b.addEventListener('click', () => {
+                sidesOptions.querySelectorAll('.swatch-btn').forEach(x => x.classList.remove('active'));
+                b.classList.add('active');
+                selectedSides = sk;
+                populateQty(v.sides_pricing[sk]);
+                updatePrice();
+              });
+              sidesOptions.appendChild(b);
+            });
+          } else {
+            sidesField.style.display = 'none';
+            selectedSides = null;
+            populateQty(v.combined_pricing);
+          }
+          updatePrice();
+        }
+
+        function populateQty(table) {
+          const sel = document.getElementById('qty-select');
+          sel.innerHTML = '';
+          Object.keys(table).map(Number).sort((a, b) => a - b).forEach(q => {
+            const opt = document.createElement('option');
+            opt.value = q; opt.textContent = q;
+            sel.appendChild(opt);
+          });
+        }
+
+        document.getElementById('qty-select').addEventListener('change', updatePrice);
+        document.querySelectorAll('[data-addon]').forEach(el => el.addEventListener('change', updatePrice));
+
+        function updatePrice() {
+          if (!selectedVariant) return;
+          const v = PRODUCT.variants[selectedVariant];
+          if (v.sides_pricing && !selectedSides) return;
+
+          const payload = {
+            key: KEY, variant: selectedVariant, sides: selectedSides,
+            qty: document.getElementById('qty-select').value,
+          };
+          document.querySelectorAll('[data-addon]').forEach(el => { payload[el.dataset.addon] = el.checked; });
+          postPrice(payload);
+        }
+      </script>
+
+    {# ---------------- tiered_simple : Envelopes, Cheques ---------------- #}
+    {% elif product.pricing_type == 'tiered_simple' %}
+      {% if product.sides_options %}
+      <div class="field">
+        <span class="field-label">Print</span>
+        <div class="swatch-options" id="sides-options">
+          {% for skey, s in product.sides_options.items() %}
+          <button type="button" class="swatch-btn" data-sides="{{ skey }}">{{ s.label }}</button>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="field">
+        <span class="field-label">Quantity</span>
+        <select id="qty-select">
+          {% if not product.sides_options %}
+            {% for q in product.qty_pricing.keys() %}<option value="{{ q }}">{{ q }}</option>{% endfor %}
+          {% else %}
+            <option value="">Choose print type first</option>
+          {% endif %}
+        </select>
+      </div>
+
+      <script>
+        const PRODUCT = {{ product | tojson }};
+        const KEY = "{{ key }}";
+        let selectedSides = null;
+
+        document.querySelectorAll('#sides-options .swatch-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('#sides-options .swatch-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            selectedSides = btn.dataset.sides;
+            const sel = document.getElementById('qty-select');
+            sel.innerHTML = '';
+            Object.keys(PRODUCT.sides_options[selectedSides].pricing).map(Number).sort((a,b)=>a-b).forEach(q => {
+              const opt = document.createElement('option'); opt.value = q; opt.textContent = q; sel.appendChild(opt);
+            });
+            updatePrice();
+          });
+        });
+
+        document.getElementById('qty-select').addEventListener('change', updatePrice);
+
+        function updatePrice() {
+          const payload = { key: KEY, qty: document.getElementById('qty-select').value };
+          if (PRODUCT.sides_options) {
+            if (!selectedSides) return;
+            payload.sides = selectedSides;
+          }
+          postPrice(payload);
+        }
+        if (!PRODUCT.sides_options) updatePrice();
+      </script>
+
+    {# ---------------- fixed_qty_variant : Presentation Folders ---------------- #}
+    {% elif product.pricing_type == 'fixed_qty_variant' %}
+      <div class="field">
+        <span class="field-label">Assembly ({{ product.fixed_qty }} units)</span>
+        <div class="swatch-options" id="variant-options">
+          {% for vkey, v in product.variants.items() %}
+          <button type="button" class="swatch-btn" data-variant="{{ vkey }}">{{ v.label }}</button>
+          {% endfor %}
+        </div>
+      </div>
+      <script>
+        const KEY = "{{ key }}";
+        document.querySelectorAll('#variant-options .swatch-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('#variant-options .swatch-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            postPrice({ key: KEY, variant: btn.dataset.variant });
+          });
+        });
+      </script>
+
+    {# ---------------- per_unit_min_qty : Posters ---------------- #}
+    {% elif product.pricing_type == 'per_unit_min_qty' %}
+      <div class="field">
+        <span class="field-label">Size</span>
+        <div class="swatch-options" id="size-options">
+          {% for skey in product.size_unit_price.keys() %}
+          <button type="button" class="swatch-btn" data-size="{{ skey }}">{{ skey }}"</button>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="field">
+        <span class="field-label">Quantity (minimum {{ product.min_qty }})</span>
+        <input type="number" id="qty-input" value="{{ product.min_qty }}" min="{{ product.min_qty }}">
+      </div>
+      <script>
+        const KEY = "{{ key }}";
+        let selectedSize = null;
+        document.querySelectorAll('#size-options .swatch-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('#size-options .swatch-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            selectedSize = btn.dataset.size;
+            updatePrice();
+          });
+        });
+        document.getElementById('qty-input').addEventListener('input', updatePrice);
+        function updatePrice() {
+          if (!selectedSize) return;
+          postPrice({ key: KEY, size: selectedSize, qty: document.getElementById('qty-input').value });
+        }
+      </script>
+
+    {# ---------------- fixed_price : Pull-Up Banner, A-Frame, Vehicle Magnets ---------------- #}
+    {% elif product.pricing_type == 'fixed_price' %}
+      {% if product.addon_fee %}
+      <div class="field">
+        <div class="checkbox-row">
+          <input type="checkbox" id="addon-fee" data-addon-key="{{ product.addon_fee.key }}">
+          <label for="addon-fee">{{ product.addon_fee.label }} (+${{ product.addon_fee.amount }})</label>
+        </div>
+      </div>
+      {% endif %}
+      <script>
+        const KEY = "{{ key }}";
+        function updatePrice() {
+          const payload = { key: KEY };
+          const addonEl = document.getElementById('addon-fee');
+          if (addonEl) payload[addonEl.dataset.addonKey] = addonEl.checked;
+          postPrice(payload);
+        }
+        const addonEl = document.getElementById('addon-fee');
+        if (addonEl) addonEl.addEventListener('change', updatePrice);
+        updatePrice();
+      </script>
+
+    {# ---------------- variant_fixed_price : Sandwich Board, Backdrop, Yard Sign, etc. ---------------- #}
+    {% elif product.pricing_type == 'variant_fixed_price' %}
+      <div class="field">
+        <span class="field-label">Choose an option</span>
+        <div class="swatch-options" id="variant-options">
+          {% for vkey, v in product.variants.items() %}
+          <button type="button" class="swatch-btn" data-variant="{{ vkey }}">{{ v.label }}</button>
+          {% endfor %}
+        </div>
+      </div>
+      <script>
+        const KEY = "{{ key }}";
+        document.querySelectorAll('#variant-options .swatch-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('#variant-options .swatch-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            postPrice({ key: KEY, variant: btn.dataset.variant });
+          });
+        });
+      </script>
+    {% endif %}
+
+    {# ---------------- info_only : Design Services, Sign Accessories ---------------- #}
+    {% if product.pricing_type == 'info_only' %}
+      <div class="info-list">
+        {% for item in product['items'] %}
+        <div class="info-row"><span>{{ item.label }}</span><strong>{{ item.price_display }}</strong></div>
+        {% endfor %}
+      </div>
+      <p class="demo-note">Demo pricing for portfolio purposes. Quote requests aren't wired up in this demo.</p>
+    {% else %}
+      <div class="price-panel">
+        <div class="price-value" id="price-value">—</div>
+        <div class="price-note" id="price-note"></div>
+        <div class="price-error" id="price-error"></div>
+        <div class="demo-note">Demo pricing for portfolio purposes.</div>
+      </div>
+
+      <div class="field">
+        <span class="field-label">Upload your design</span>
+        <label class="btn-primary file-label" for="file-input">Choose file</label>
+        <input type="file" id="file-input" accept="{{ upload_accept }}" class="visually-hidden">
+        <div class="file-name" id="file-name">No file chosen</div>
+        <div class="upload-hint">PDF, JPG, PNG, AI, EPS or TIFF. Max 50&nbsp;MB.</div>
+        <div class="upload-status" id="upload-status"></div>
+      </div>
+
+      <div class="upload-note" id="upload-note">Choose your options above before uploading your design.</div>
+      <button class="btn-primary" id="upload-btn" disabled>Upload design &amp; continue</button>
+    {% endif %}
+  </div>
+</div>
+
+{% if product.pricing_type != 'info_only' %}
+<script>
+  const UPLOAD_KEY = "{{ key }}";
+  const fileInput = document.getElementById('file-input');
+  const fileNameEl = document.getElementById('file-name');
+  const uploadStatus = document.getElementById('upload-status');
+  const uploadBtn = document.getElementById('upload-btn');
+
+  fileInput.addEventListener('change', () => {
+    fileNameEl.textContent = fileInput.files[0] ? fileInput.files[0].name : 'No file chosen';
+  });
+
+  function setUploadStatus(message, kind) {
+    uploadStatus.textContent = message;
+    uploadStatus.className = 'upload-status' + (kind ? ' ' + kind : '');
+  }
+
+  uploadBtn.addEventListener('click', async () => {
+    const file = fileInput.files[0];
+    if (!file) {
+      setUploadStatus('Choose a file first.', 'error');
+      return;
+    }
+
+    uploadBtn.disabled = true;
+    setUploadStatus('Uploading…');
+
+    const formData = new FormData();
+    formData.append('key', UPLOAD_KEY);
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) {
+        setUploadStatus(data.error || 'Upload failed.', 'error');
+        uploadBtn.disabled = false;
+        return;
+      }
+      uploadBtn.classList.add('btn-success');
+      uploadBtn.textContent = 'Design uploaded ✓';
+      setUploadStatus(
+        `Uploaded "${data.filename}" (${Math.ceil(data.size / 1024)} KB). Checkout comes in the next build step.`,
+        'success'
+      );
+    } catch (e) {
+      setUploadStatus('Upload failed — please try again.', 'error');
+      uploadBtn.disabled = false;
+    }
+  });
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,5 @@
+Flask==3.0.3
+itsdangerous==2.2.0
+# boto3 is only imported when STORAGE_BACKEND=r2 (see uploads.py) -- install
+# it once R2 credentials exist. Not required for the default local backend.
+# boto3==1.35.0

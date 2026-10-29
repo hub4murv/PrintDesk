@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}PrintDesk{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a href="{{ url_for('index') }}" class="wordmark" aria-label="PrintDesk home">
+        {# Drop a file at static/images/logo.svg and it replaces the text wordmark automatically. #}
+        {% if logo_file %}
+        <img src="{{ url_for('static', filename=logo_file) }}" alt="PrintDesk" class="logo-img">
+        {% else %}
+        <span class="wordmark-name">PrintDesk</span>
+        {% endif %}
+        <span class="wordmark-text">Order Online</span>
+      </a>
+      <span class="tagline-header">Demo store</span>
+    </div>
+  </header>
+
+  {% block content %}{% endblock %}
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <strong>Demo pricing for portfolio purposes.</strong> PrintDesk is a portfolio project, not a real print shop — no orders are fulfilled.
+    </div>
+  </footer>
+</body>
+</html>

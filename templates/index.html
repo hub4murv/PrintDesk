@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+
+{% block title %}PrintDesk{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Order online — skip the phone call</div>
+    <h1>Upload your design, pick a product, get a price.</h1>
+    <p>Business cards, signs, banners and more. Choose a category below to see stock, sizes and pricing.</p>
+    <p class="demo-note">Demo pricing for portfolio purposes.</p>
+  </div>
+</section>
+
+<div class="wrap">
+  <div class="grid">
+    {% for c in cards %}
+    <a class="card" href="{{ url_for('product_detail', key=c.key) }}">
+      {% set img = product_image(c.key) %}
+      <div class="swatch{% if img %} has-image{% endif %}">
+        {% if img %}
+        <img src="{{ url_for('static', filename=img) }}" alt="{{ c.category }}" loading="lazy" decoding="async">
+        {% else %}
+        {{ icon(c.icon) }}
+        {% endif %}
+      </div>
+      <div class="category">{{ c.category }}</div>
+      <div class="tagline">{{ c.tagline }}</div>
+      <div class="price-from">From <strong>${{ '%g'|format(c.from_price) }}</strong></div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

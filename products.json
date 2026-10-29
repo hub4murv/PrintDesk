@@ -1,0 +1,382 @@
+{
+  "business_cards": {
+    "category": "Business Cards",
+    "tagline": "Choose a stock, sides, and quantity",
+    "pricing_type": "tiered_multi_variant",
+    "from_price": 39,
+    "icon": "card",
+    "variants": {
+      "standard_c2s_silk": {
+        "label": "Standard (C2S 130# / Silk 14pt)",
+        "sides_pricing": {
+          "4/0": {
+            "100": 39,
+            "250": 49,
+            "500": 64,
+            "1000": 98
+          },
+          "4/4": {
+            "100": 52,
+            "250": 64,
+            "500": 82,
+            "1000": 126
+          }
+        }
+      },
+      "linen_laid": {
+        "label": "Linen / Laid",
+        "sides_pricing": {
+          "4/0": {
+            "100": 58,
+            "250": 72,
+            "500": 94,
+            "1000": 138
+          },
+          "4/4": {
+            "100": 74,
+            "250": 91,
+            "500": 118,
+            "1000": 172
+          }
+        }
+      },
+      "uv_coated_16pt": {
+        "label": "16pt UV Coated (10 business days)",
+        "combined_pricing": {
+          "1000": 245
+        }
+      },
+      "spot_uv_raised": {
+        "label": "Spot UV / Raised (10 business days)",
+        "combined_pricing": {
+          "500": 189,
+          "1000": 259
+        }
+      },
+      "soft_uv_touch": {
+        "label": "Soft UV Touch (10 business days)",
+        "combined_pricing": {
+          "500": 129,
+          "1000": 179
+        }
+      },
+      "matte_laminate_foil_16pt": {
+        "label": "16pt Matte Laminate + Gold/Silver Foil (10 business days)",
+        "sides_pricing": {
+          "1_side": {
+            "500": 219,
+            "1000": 289
+          },
+          "2_sides": {
+            "500": 259,
+            "1000": 349
+          }
+        }
+      }
+    },
+    "addons": {
+      "rounded_corners": {
+        "label": "Rounded corners",
+        "price": 12
+      }
+    }
+  },
+  "postcard_flyers": {
+    "category": "Postcard Flyers",
+    "tagline": "Choose a size, sides, and quantity",
+    "pricing_type": "tiered_multi_variant",
+    "from_price": 34,
+    "icon": "flyer",
+    "variants": {
+      "4x6": {
+        "label": "4\" x 6\"",
+        "sides_pricing": {
+          "4/0": {
+            "100": 34,
+            "250": 59,
+            "500": 99,
+            "1000": 169
+          },
+          "4/4": {
+            "100": 46,
+            "250": 79,
+            "500": 129,
+            "1000": 219
+          }
+        }
+      },
+      "5x7_5_5x8_5": {
+        "label": "5\" x 7\" / 5.5\" x 8.5\"",
+        "sides_pricing": {
+          "4/0": {
+            "100": 44,
+            "250": 74,
+            "500": 124,
+            "1000": 209
+          },
+          "4/4": {
+            "100": 58,
+            "250": 99,
+            "500": 159,
+            "1000": 269
+          }
+        }
+      }
+    }
+  },
+  "envelopes_no10": {
+    "category": "Envelopes (No. 10)",
+    "tagline": "Choose sides and quantity",
+    "pricing_type": "tiered_simple",
+    "from_price": 49,
+    "icon": "envelope",
+    "sides_options": {
+      "B/O": {
+        "label": "Black only",
+        "pricing": {
+          "100": 49,
+          "250": 79,
+          "500": 124,
+          "1000": 199
+        }
+      },
+      "4/0": {
+        "label": "Full colour",
+        "pricing": {
+          "100": 69,
+          "250": 109,
+          "500": 169,
+          "1000": 279
+        }
+      }
+    }
+  },
+  "presentation_folders": {
+    "category": "Presentation Folders",
+    "tagline": "18\" x 12\", 100 units",
+    "pricing_type": "fixed_qty_variant",
+    "from_price": 349,
+    "icon": "folder",
+    "fixed_qty": 100,
+    "variants": {
+      "customer_assembly": {
+        "label": "Customer assembly",
+        "price": 349
+      },
+      "pre_attached_pockets": {
+        "label": "Pre-attached pockets",
+        "price": 389
+      }
+    }
+  },
+  "posters": {
+    "category": "Posters",
+    "tagline": "Gloss 80# text, minimum 20 units",
+    "pricing_type": "per_unit_min_qty",
+    "from_price": 1.25,
+    "icon": "poster",
+    "min_qty": 20,
+    "size_unit_price": {
+      "8.5x11": 1.25,
+      "11x17": 1.75,
+      "12x18": 2.25
+    }
+  },
+  "manual_cheques": {
+    "category": "Manual Cheques",
+    "tagline": "Choose a quantity",
+    "pricing_type": "tiered_simple",
+    "from_price": 89,
+    "icon": "cheque",
+    "qty_pricing": {
+      "100": 89,
+      "250": 119,
+      "500": 159,
+      "1000": 219
+    }
+  },
+  "laser_cheques": {
+    "category": "Laser Cheques",
+    "tagline": "Choose a quantity",
+    "pricing_type": "tiered_simple",
+    "from_price": 189,
+    "icon": "cheque",
+    "qty_pricing": {
+      "250": 189,
+      "500": 249,
+      "1000": 349
+    }
+  },
+  "pull_up_banner": {
+    "category": "Pull-Up Banner",
+    "tagline": "33.5\" x 79\"",
+    "pricing_type": "fixed_price",
+    "from_price": 239,
+    "icon": "banner",
+    "price": 239,
+    "addon_fee": {
+      "key": "setup_artwork",
+      "label": "Setup / Artwork",
+      "amount": 65
+    }
+  },
+  "sandwich_board": {
+    "category": "Sandwich Board",
+    "tagline": "Choose a size",
+    "pricing_type": "variant_fixed_price",
+    "from_price": 149,
+    "icon": "sign",
+    "variants": {
+      "18.5x23.5": {
+        "label": "18.5\" x 23.5\"",
+        "price": 149
+      },
+      "23.5x31.5": {
+        "label": "23.5\" x 31.5\"",
+        "price": 189
+      },
+      "36x48": {
+        "label": "36\" x 48\"",
+        "price": 329
+      }
+    }
+  },
+  "a_frame_sign": {
+    "category": "A-Frame Sign",
+    "tagline": "24\" x 36\"",
+    "pricing_type": "fixed_price",
+    "from_price": 199,
+    "icon": "sign",
+    "price": 199
+  },
+  "vehicle_magnets": {
+    "category": "Vehicle Magnets",
+    "tagline": "Set of 2, 24\" x 12\" each",
+    "pricing_type": "fixed_price",
+    "from_price": 129,
+    "icon": "magnet",
+    "price": 129
+  },
+  "backdrop_8x8": {
+    "category": "Backdrop 8' x 8'",
+    "tagline": "Solid background; green or orange colour extra",
+    "pricing_type": "variant_fixed_price",
+    "from_price": 349,
+    "icon": "backdrop",
+    "variants": {
+      "no_hardware": {
+        "label": "Fabric only",
+        "price": 349
+      },
+      "with_hardware": {
+        "label": "With hardware",
+        "price": 549
+      }
+    }
+  },
+  "yard_sign_4x8": {
+    "category": "Yard Sign 4' x 8'",
+    "tagline": "Choose a material",
+    "pricing_type": "variant_fixed_price",
+    "from_price": 159,
+    "icon": "sign",
+    "variants": {
+      "coroplast": {
+        "label": "Coroplast",
+        "price": 159
+      },
+      "polymetal": {
+        "label": "Polymetal",
+        "price": 299
+      }
+    }
+  },
+  "development_permit_sign": {
+    "category": "Development Permit Sign",
+    "tagline": "24\" x 18\" — choose a material",
+    "pricing_type": "variant_fixed_price",
+    "from_price": 49,
+    "icon": "sign",
+    "variants": {
+      "coroplast": {
+        "label": "Coroplast",
+        "price": 49
+      },
+      "polymetal": {
+        "label": "Polymetal",
+        "price": 75
+      }
+    }
+  },
+  "private_property_sign": {
+    "category": "Private Property Sign",
+    "tagline": "Choose a size",
+    "pricing_type": "variant_fixed_price",
+    "from_price": 35,
+    "icon": "sign",
+    "variants": {
+      "12x18_parking": {
+        "label": "12\" x 18\" (parking stall / post)",
+        "price": 35
+      },
+      "24x24_towing": {
+        "label": "24\" x 24\" (to enforce towing)",
+        "price": 85
+      }
+    }
+  },
+  "design_services": {
+    "category": "Design & Setup Services",
+    "tagline": "Get a custom quote from our design team",
+    "pricing_type": "info_only",
+    "from_price": 45,
+    "icon": "service",
+    "items": [
+      {
+        "label": "Logo Design (Basic)",
+        "price_display": "$120"
+      },
+      {
+        "label": "Business Card Design",
+        "price_display": "$45 – $70"
+      },
+      {
+        "label": "Logo + Business Card Setup",
+        "price_display": "$150 – $190"
+      },
+      {
+        "label": "Digital File (Flyer / Letterhead)",
+        "price_display": "$90 – $160"
+      },
+      {
+        "label": "Digital Menu (static)",
+        "price_display": "$110"
+      },
+      {
+        "label": "Menu Design",
+        "price_display": "$260"
+      },
+      {
+        "label": "Digital Forms (MS Office)",
+        "price_display": "$140"
+      }
+    ]
+  },
+  "sign_accessories": {
+    "category": "Sign Accessories",
+    "tagline": "Add-ons for signs and banners",
+    "pricing_type": "info_only",
+    "from_price": 1.75,
+    "icon": "service",
+    "items": [
+      {
+        "label": "Grommets",
+        "price_display": "$1.75 each"
+      },
+      {
+        "label": "Metal H Step Stakes",
+        "price_display": "$3 each"
+      }
+    ]
+  }
+}
