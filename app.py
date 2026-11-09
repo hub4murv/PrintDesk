@@ -9,10 +9,17 @@ Then open http://127.0.0.1:5000
 Debug mode is OFF unless FLASK_DEBUG=1 is set in the environment.
 """
 
+import os
+
+# Application Insights: only active when the connection string is set
+# (in Azure). Must run before Flask is imported so requests are tracked.
+if os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"):
+    from azure.monitor.opentelemetry import configure_azure_monitor
+    configure_azure_monitor()
+
 import io
 import json
 import logging
-import os
 import uuid
 from datetime import datetime, timezone
 
@@ -161,6 +168,7 @@ def calculate_price():
     key = data.get("key")
     product = PRODUCTS.get(key)
     if not product:
+        logger.warning("Price requested for unknown product: %s", key)
         return jsonify({"error": "Unknown product."}), 400
 
     ptype = product["pricing_type"]
