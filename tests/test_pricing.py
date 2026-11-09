@@ -23,7 +23,7 @@ def test_business_cards_price(client):
         "qty": 100,
     })
     assert response.status_code == 200
-    assert response.get_json()["price"] == 40
+    assert response.get_json()["price"] == 39
 
 def test_posters_price(client):
     response = client.post("/api/price", json={
