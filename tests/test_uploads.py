@@ -68,9 +68,11 @@ def stored_files(storage):
 def test_valid_upload_is_stored(client, temp_storage):
     response = upload(client, "poster.png", PNG)
     assert response.status_code == 200
-    assert response.get_json() == {"filename": "poster.png", "size": len(PNG)}
+    data = response.get_json()
+    assert data["filename"] == "poster.png"
+    assert data["size"] == len(PNG)
     files = stored_files(temp_storage)
-    assert len(files) == 1
+    assert files == [data["file_id"]]  # the browser gets the storage key back for the order
     assert temp_storage.get_metadata(files[0])["original_filename"] == "poster.png"
 
 

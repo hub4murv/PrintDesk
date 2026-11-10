@@ -22,6 +22,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import urljoin
 import requests
 
 
@@ -29,6 +30,7 @@ from flask import Flask, abort, jsonify, render_template, request, send_file
 
 from uploads import (
     ALLOWED_EXTENSIONS,
+    is_valid_storage_key,
     MAX_UPLOAD_BYTES,
     LocalDiskStorage,
     UploadRejected,
@@ -53,6 +55,9 @@ with open(PRODUCTS_PATH, encoding="utf-8") as f:
 storage = build_storage(app)
 
 FLOW_ORDER_URL = os.environ.get("FLOW_ORDER_URL")
+# Design links in orders stay valid for 6 days: longer than the 3-day approval
+# timeout, shorter than the 7-day maximum of a user delegation SAS.
+DESIGN_LINK_SECONDS = 6 * 24 * 3600
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 LOGO_FILE = "images/logo.svg"
 PRODUCT_IMAGE_DIR = "images/products"
@@ -140,18 +145,20 @@ def upload_design():
         "scan_clean": scan.clean,
     })
 
+    # Never log download links: a signed link is a password for that file.
     logger.info(
-        "upload stored: key=%s product=%s size=%d scan_engine=%s staff_link=%s",
-        storage_key, key, len(data), scan.engine, storage.signed_url(storage_key),
+        "upload stored: key=%s product=%s size=%d scan_engine=%s",
+        storage_key, key, len(data), scan.engine,
     )
 
-    return jsonify({"filename": file.filename, "size": len(data)})
+    # file_id goes back with the order, so the flow gets a link to this design.
+    return jsonify({"filename": file.filename, "size": len(data), "file_id": storage_key})
 
 
 @app.route("/staff/uploads/<token>")
 def staff_download(token):
     if not isinstance(storage, LocalDiskStorage):
-        abort(404)  # R2 uploads are retrieved via storage.signed_url() presigned URLs directly
+        abort(404)  # Azure uploads are downloaded with SAS links straight from Blob Storage
 
     storage_key = storage.resolve_token(token)
     if not storage_key:
@@ -213,7 +220,12 @@ def place_order():
     result = handler(product, data)
     if isinstance(result, tuple):  # (response, 400) means the options are invalid
         return result
-    amount = result.get_json()["price"]
+    priced = result.get_json()
+    amount = priced["price"]
+
+    file_id = data.get("file_id")
+    if not is_valid_storage_key(file_id) or not storage.exists(file_id):
+        return jsonify({"error": "Please upload your design first."}), 400
 
     if not FLOW_ORDER_URL:
         logger.warning("FLOW_ORDER_URL is not set; online ordering is disabled")
@@ -224,7 +236,10 @@ def place_order():
         "order_id": order_id,
         "customer_name": customer_name,
         "product": product["category"],
+        "details": _describe_options(product, data, priced),
         "amount": amount,
+        # Absolute link the manager can open from Teams, the approval or Dataverse.
+        "design_url": urljoin(request.host_url, storage.signed_url(file_id, expires_in=DESIGN_LINK_SECONDS)),
     }
     try:
         response = requests.post(FLOW_ORDER_URL, json=payload, timeout=10)
@@ -234,6 +249,38 @@ def place_order():
         return jsonify({"error": "We couldn't place your order. Please try again."}), 502
 
     return jsonify({"order_id": order_id, "amount": amount, "status": "received"}), 202
+
+
+def _describe_options(product, data, priced):
+    """Human-readable summary of what to print, e.g. "Coroplast · qty 4".
+
+    Only called after the pricing handler accepted the options, so every value is valid.
+    """
+    parts = []
+    variant = _pick(product.get("variants", {}), data.get("variant"))
+    if variant:
+        parts.append(variant["label"])
+    sides_option = _pick(product.get("sides_options", {}), data.get("sides"))
+    if sides_option:
+        parts.append(sides_option["label"])
+    elif isinstance(data.get("sides"), str):
+        parts.append(data["sides"])  # e.g. "4/0" for business cards
+    if _pick(product.get("size_unit_price", {}), data.get("size")) is not None:
+        parts.append(f'{data["size"]}"')
+
+    qty = priced.get("qty") or data.get("qty") or 1
+    if product["pricing_type"] == "fixed_qty_variant":
+        parts.append(f'{qty} × {product["fixed_qty"]} units')
+    else:
+        parts.append(f"qty {qty}")
+
+    for addon_key, addon in product.get("addons", {}).items():
+        if data.get(addon_key):
+            parts.append(addon["label"])
+    fee = product.get("addon_fee")
+    if fee and data.get(fee["key"]):
+        parts.append(fee["label"])
+    return " · ".join(parts)
 
 
 def _not_confirmed():

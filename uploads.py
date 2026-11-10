@@ -1,22 +1,25 @@
 """
 File upload validation + storage abstraction for PrintDesk.
 
-Storage defaults to local disk (STORAGE_BACKEND=local, the default) so the
-prototype works with zero external accounts. Swap to Cloudflare R2
-(STORAGE_BACKEND=r2 + the R2_* env vars below) once real credentials exist --
-the Storage interface is identical either way, so nothing in app.py changes.
+Storage backends (STORAGE_BACKEND):
+- "local" (default): files on the server's disk. Fine for local development and
+  tests, but on Azure App Service the disk can be wiped on redeploy/restart.
+- "azure": a private Azure Blob Storage container, accessed with the app's
+  managed identity (no keys or connection strings anywhere). Staff get
+  short-lived, read-only user delegation SAS links.
 
-Still open (flagged in CLAUDE.md, not solved here):
-- Antivirus scanning is a no-op stub (see scan_file) -- no ClamAV/clamd
-  wired up yet. Every upload is currently unscanned.
-- No PII retention policy for stored customer files.
+Still open:
+- Antivirus scanning is a no-op stub (see scan_file). Every upload is unscanned.
 """
 
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import BinaryIO, Optional
+from urllib.parse import quote
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -48,6 +51,18 @@ _SIGNATURES = {
 _BLOCKED_SIGNATURES = [b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"]
 
 ALLOWED_EXTENSIONS = set(_SIGNATURES.keys())
+
+# Storage keys are generated server-side: 32 hex characters + an allowed extension.
+_STORAGE_KEY_RE = re.compile(r"^[0-9a-f]{32}\.(%s)$" % "|".join(sorted(ALLOWED_EXTENSIONS)))
+
+
+def is_valid_storage_key(value) -> bool:
+    """True only for keys in the exact format the server creates.
+
+    The browser sends the key back when placing an order, so it must never be
+    trusted as a path (no "../", no other folders, no other file types).
+    """
+    return isinstance(value, str) and bool(_STORAGE_KEY_RE.fullmatch(value))
 _SNIFF_BYTES = 16
 
 
@@ -104,6 +119,9 @@ class Storage:
     def save_json(self, key: str, obj: dict) -> None:
         raise NotImplementedError
 
+    def exists(self, key: str) -> bool:
+        raise NotImplementedError
+
     def signed_url(self, key: str, expires_in: int = 3600) -> str:
         raise NotImplementedError
 
@@ -111,9 +129,8 @@ class Storage:
 class LocalDiskStorage(Storage):
     """Prototype-only backend. Files live outside the Flask static/ web root
     and are never served directly -- retrieval always goes through the
-    signed `/staff/uploads/<token>` route in app.py, the same shape a real
-    R2 presigned URL takes. Set STORAGE_BACKEND=r2 with the R2_* env vars
-    to move to real object storage without touching any calling code.
+    signed `/staff/uploads/<token>` route in app.py, the same shape as the
+    SAS links of the Azure backend.
     """
 
     def __init__(self, root: str, secret_key: str):
@@ -142,6 +159,9 @@ class LocalDiskStorage(Storage):
     def path_for(self, key: str) -> str:
         return self._path_for(key)
 
+    def exists(self, key: str) -> bool:
+        return is_valid_storage_key(key) and os.path.isfile(self._path_for(key))
+
     def signed_url(self, key: str, expires_in: int = 3600) -> str:
         token = self._serializer.dumps(key)
         return f"/staff/uploads/{token}"
@@ -159,55 +179,81 @@ class LocalDiskStorage(Storage):
         return key
 
 
-class R2Storage(Storage):
-    """Cloudflare R2 (S3-compatible) backend -- inactive until
-    STORAGE_BACKEND=r2 and the env vars below are set:
-      R2_ACCOUNT_ID, R2_BUCKET_NAME, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
+class AzureBlobStorage(Storage):
+    """Private Azure Blob Storage container, accessed with Microsoft Entra ID.
+
+    On App Service, DefaultAzureCredential picks up the app's managed identity,
+    so there are no keys or connection strings in code or settings. Locally it
+    falls back to your `az login` session (you'd need a Storage Blob Data role).
+
+    Required roles for the identity:
+    - Storage Blob Data Contributor on the container (read/write blobs)
+    - Storage Blob Delegator on the storage account (create user delegation SAS links)
     """
 
-    def __init__(self):
-        import boto3  # imported lazily so boto3 stays optional until R2 is wired up
+    # A user delegation key (and any SAS signed with it) can live at most 7 days.
+    MAX_LINK_SECONDS = 7 * 24 * 3600 - 15 * 60
 
-        account_id = os.environ["R2_ACCOUNT_ID"]
-        self.bucket = os.environ["R2_BUCKET_NAME"]
-        self.client = boto3.client(
-            "s3",
-            endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
-            aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
-            aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
-            region_name="auto",
-        )
+    def __init__(self, account_url: str, container: str, credential=None, service_client=None):
+        from azure.storage.blob import BlobServiceClient  # only needed for this backend
+
+        if service_client is None:
+            if credential is None:
+                from azure.identity import DefaultAzureCredential
+                credential = DefaultAzureCredential()
+            service_client = BlobServiceClient(account_url=account_url, credential=credential)
+        self._service = service_client
+        self.container = container
+        self._container = service_client.get_container_client(container)
 
     def save(self, fileobj: BinaryIO, key: str) -> None:
-        self.client.upload_fileobj(fileobj, self.bucket, key)
+        self._container.upload_blob(name=key, data=fileobj, overwrite=False)
 
     def save_json(self, key: str, obj: dict) -> None:
-        self.client.put_object(
-            Bucket=self.bucket,
-            Key=key + ".json",
-            Body=json.dumps(obj).encode("utf-8"),
-            ContentType="application/json",
+        self._container.upload_blob(
+            name=key + ".json",
+            data=json.dumps(obj).encode("utf-8"),
+            overwrite=True,
         )
 
+    def exists(self, key: str) -> bool:
+        return is_valid_storage_key(key) and self._container.get_blob_client(key).exists()
+
     def signed_url(self, key: str, expires_in: int = 3600) -> str:
-        return self.client.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": self.bucket, "Key": key},
-            ExpiresIn=expires_in,
+        """Read-only link to one blob, signed with a user delegation key (no account key)."""
+        from azure.storage.blob import BlobSasPermissions, generate_blob_sas
+
+        now = datetime.now(timezone.utc)
+        start = now - timedelta(minutes=5)  # tolerate small clock differences
+        expiry = now + timedelta(seconds=min(expires_in, self.MAX_LINK_SECONDS))
+        delegation_key = self._service.get_user_delegation_key(start, expiry)
+        sas = generate_blob_sas(
+            account_name=self._service.account_name,
+            container_name=self.container,
+            blob_name=key,
+            user_delegation_key=delegation_key,
+            permission=BlobSasPermissions(read=True),
+            start=start,
+            expiry=expiry,
+            protocol="https",
         )
+        return f"{self._container.url}/{quote(key)}?{sas}"
 
 
 def build_storage(app) -> Storage:
     backend = os.environ.get("STORAGE_BACKEND", "local")
-    if backend == "r2":
-        return R2Storage()
+    if backend == "azure":
+        account_url = os.environ.get("AZURE_STORAGE_ACCOUNT_URL")
+        if not account_url:
+            raise ValueError("STORAGE_BACKEND=azure needs AZURE_STORAGE_ACCOUNT_URL")
+        container = os.environ.get("AZURE_STORAGE_CONTAINER", "designs")
+        return AzureBlobStorage(account_url, container)
     if backend != "local":
         raise ValueError(f"Unknown STORAGE_BACKEND: {backend!r}")
 
     root = os.environ.get("UPLOAD_DIR") or os.path.join(app.root_path, "uploads_private")
     logger.warning(
-        "STORAGE_BACKEND=local: files are stored on local disk. Fine for demoing "
-        "this prototype, but must move to R2 (STORAGE_BACKEND=r2 + R2_* env vars) "
-        "before this ever handles a real customer file."
+        "STORAGE_BACKEND=local: uploads are stored on the server's disk. Use "
+        "STORAGE_BACKEND=azure in production, the disk can be wiped on redeploy."
     )
     return LocalDiskStorage(root, secret_key=app.secret_key)
