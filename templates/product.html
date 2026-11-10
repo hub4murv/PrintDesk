@@ -38,23 +38,20 @@
         const valueEl = document.getElementById('price-value');
         const noteEl = document.getElementById('price-note');
         const errorEl = document.getElementById('price-error');
-        const uploadBtn = document.getElementById('upload-btn');
-        const uploadNote = document.getElementById('upload-note');
 
         if (data.error) {
           window.lastPricePayload = null;
           valueEl.textContent = '—';
           noteEl.textContent = '';
           errorEl.textContent = data.error;
-          if (uploadBtn) uploadBtn.disabled = true;
         } else {
           window.lastPricePayload = payload;
           valueEl.textContent = `$${data.price} CAD`;
           noteEl.textContent = data.note || '';
           errorEl.textContent = '';
-          if (uploadBtn) uploadBtn.disabled = false;
-          if (uploadNote) uploadNote.textContent = '';
         }
+        // The order form (bottom of the page) decides whether "Place order" is enabled.
+        if (window.updateOrderButton) window.updateOrderButton();
       }
     </script>
     {% endif %}
@@ -333,22 +330,35 @@
         <div class="demo-note">Demo pricing for portfolio purposes.</div>
       </div>
 
-      <div class="field">
-        <span class="field-label">Upload your design</span>
-        <label class="btn-primary file-label" for="file-input">Choose file</label>
-        <input type="file" id="file-input" accept="{{ upload_accept }}" class="visually-hidden">
-        <div class="file-name" id="file-name">No file chosen</div>
-        <div class="upload-hint">PDF, JPG, PNG, AI, EPS or TIFF. Max 50&nbsp;MB.</div>
-        <div class="upload-status" id="upload-status"></div>
-      </div>
+      <form class="order-form" id="order-form" novalidate>
+        <div class="field">
+          <span class="field-label">Your design</span>
+          <label class="dropzone" id="dropzone" for="file-input" tabindex="0">
+            <input type="file" id="file-input" accept="{{ upload_accept }}" class="visually-hidden">
+            <span class="dropzone-icon" id="dropzone-icon" aria-hidden="true">&uarr;</span>
+            <span class="dropzone-title" id="dropzone-title">Drag &amp; drop your design here</span>
+            <span class="dropzone-sub" id="dropzone-sub">or <u>browse files</u> &middot; PDF, JPG, PNG, AI, EPS, TIFF &middot; max 50&nbsp;MB</span>
+          </label>
+          <div class="form-message" id="upload-status" role="status"></div>
+        </div>
 
-      <div class="upload-note" id="upload-note">Choose your options above before uploading your design.</div>
-      <button class="btn-primary" id="upload-btn" disabled>Upload design &amp; continue</button>
-        <div class="field" id="order-section" hidden>
-        <label class="field-label" for="customer-name">Your name or company</label>
-        <input type="text" id="customer-name" maxlength="100" autocomplete="organization">
-        <button class="btn-primary" id="order-btn">Place order</button>
-        <div class="upload-status" id="order-status"></div>
+        <div class="field">
+          <label class="field-label" for="customer-name">Your name or company</label>
+          <input type="text" id="customer-name" class="text-input" maxlength="100"
+                 autocomplete="organization" placeholder="e.g. Maple Street Bakery">
+        </div>
+
+        <button type="submit" class="btn-primary" id="order-btn" disabled>Place order</button>
+        <div class="form-message" id="order-status" role="status"></div>
+      </form>
+
+      <div class="order-success" id="order-success" hidden>
+        <div class="order-success-icon" aria-hidden="true">&check;</div>
+        <h2 class="order-success-title" id="order-success-title">Thank you!</h2>
+        <p class="order-success-lead">Your order is in. Here&rsquo;s your reference number:</p>
+        <div class="order-number" id="order-number"></div>
+        <p class="order-success-text" id="order-success-text"></p>
+        <a class="btn-secondary order-again" href="{{ url_for('product_detail', key=key) }}">Place another order</a>
       </div>
     {% endif %}
   </div>
@@ -357,29 +367,46 @@
 {% if product.pricing_type != 'info_only' %}
 <script>
   const UPLOAD_KEY = "{{ key }}";
+  // Keep in sync with the approval threshold in the Power Automate flow.
+  const APPROVAL_THRESHOLD = 500;
+
+  const form = document.getElementById('order-form');
   const fileInput = document.getElementById('file-input');
-  const fileNameEl = document.getElementById('file-name');
+  const dropzone = document.getElementById('dropzone');
+  const dropTitle = document.getElementById('dropzone-title');
+  const dropSub = document.getElementById('dropzone-sub');
+  const dropIcon = document.getElementById('dropzone-icon');
   const uploadStatus = document.getElementById('upload-status');
-  const uploadBtn = document.getElementById('upload-btn');
+  const nameInput = document.getElementById('customer-name');
+  const orderBtn = document.getElementById('order-btn');
+  const orderStatus = document.getElementById('order-status');
 
-  fileInput.addEventListener('change', () => {
-    fileNameEl.textContent = fileInput.files[0] ? fileInput.files[0].name : 'No file chosen';
-  });
+  const DEFAULT_TITLE = dropTitle.textContent;
+  const DEFAULT_SUB = dropSub.innerHTML;
 
-  function setUploadStatus(message, kind) {
-    uploadStatus.textContent = message;
-    uploadStatus.className = 'upload-status' + (kind ? ' ' + kind : '');
+  let designUploaded = false;
+  let uploading = false;
+
+  function setMessage(el, message, kind) {
+    el.textContent = message;
+    el.className = 'form-message' + (kind ? ' ' + kind : '');
   }
 
-  uploadBtn.addEventListener('click', async () => {
-    const file = fileInput.files[0];
-    if (!file) {
-      setUploadStatus('Choose a file first.', 'error');
-      return;
-    }
+  // "Place order" is enabled only when the design is uploaded, a name is entered
+  // and the selected options have a valid price.
+  window.updateOrderButton = function () {
+    orderBtn.disabled = uploading || !(designUploaded && nameInput.value.trim() && window.lastPricePayload);
+  };
 
-    uploadBtn.disabled = true;
-    setUploadStatus('Uploading…');
+  async function uploadDesign(file) {
+    if (!file || uploading) return;
+    uploading = true;
+    designUploaded = false;
+    window.updateOrderButton();
+    dropzone.className = 'dropzone is-uploading';
+    dropTitle.textContent = `Uploading ${file.name}…`;
+    dropSub.textContent = 'This only takes a moment.';
+    setMessage(uploadStatus, '');
 
     const formData = new FormData();
     formData.append('key', UPLOAD_KEY);
@@ -387,57 +414,84 @@
 
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (!res.ok) {
-        setUploadStatus(data.error || 'Upload failed.', 'error');
-        uploadBtn.disabled = false;
-        return;
-      }
-      uploadBtn.classList.add('btn-success');
-      uploadBtn.textContent = 'Design uploaded ✓';
-      setUploadStatus(
-        `Uploaded "${data.filename}" (${Math.ceil(data.size / 1024)} KB). Now enter your name and place the order.`,
-        'success'
-      );
-      document.getElementById('order-section').hidden = false;
-    } catch (e) {
-      setUploadStatus('Upload failed — please try again.', 'error');
-      uploadBtn.disabled = false;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Upload failed — please try again.');
+      designUploaded = true;
+      dropzone.className = 'dropzone is-done';
+      dropIcon.textContent = '✓';
+      dropTitle.textContent = data.filename;
+      dropSub.textContent = `${Math.ceil(data.size / 1024)} KB uploaded · click or drop to replace`;
+    } catch (err) {
+      dropzone.className = 'dropzone is-error';
+      dropIcon.textContent = '↑';
+      dropTitle.textContent = DEFAULT_TITLE;
+      dropSub.innerHTML = DEFAULT_SUB;
+      setMessage(uploadStatus, err.message || 'Upload failed — please try again.', 'error');
+    } finally {
+      uploading = false;
+      fileInput.value = '';
+      window.updateOrderButton();
     }
-  });
-    const orderBtn = document.getElementById('order-btn');
-  const orderStatus = document.getElementById('order-status');
-
-  function setOrderStatus(message, kind) {
-    orderStatus.textContent = message;
-    orderStatus.className = 'upload-status' + (kind ? ' ' + kind : '');
   }
 
-  orderBtn.addEventListener('click', async () => {
-    const name = document.getElementById('customer-name').value.trim();
-    if (!name) { setOrderStatus('Please enter your name or company.', 'error'); return; }
-    if (!window.lastPricePayload) { setOrderStatus('Please choose your options first.', 'error'); return; }
+  fileInput.addEventListener('change', () => uploadDesign(fileInput.files[0]));
+
+  // Keyboard users: Enter or Space on the drop zone opens the file picker.
+  dropzone.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+  });
+
+  ['dragenter', 'dragover'].forEach(type => dropzone.addEventListener(type, e => {
+    e.preventDefault();
+    dropzone.classList.add('is-dragover');
+  }));
+  ['dragleave', 'drop'].forEach(type => dropzone.addEventListener(type, e => {
+    e.preventDefault();
+    dropzone.classList.remove('is-dragover');
+  }));
+  dropzone.addEventListener('drop', e => uploadDesign(e.dataTransfer.files[0]));
+
+  // A file dropped outside the zone shouldn't make the browser open it.
+  ['dragover', 'drop'].forEach(type => window.addEventListener(type, e => e.preventDefault()));
+
+  nameInput.addEventListener('input', window.updateOrderButton);
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const name = nameInput.value.trim();
+    if (!designUploaded || !name || !window.lastPricePayload) return;
 
     orderBtn.disabled = true;
-    setOrderStatus('Placing your order…');
+    orderBtn.textContent = 'Placing your order…';
+    setMessage(orderStatus, '');
+
     try {
       const res = await fetch('/api/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...window.lastPricePayload, customer_name: name }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setOrderStatus(data.error || 'Order failed.', 'error');
-        orderBtn.disabled = false;
-        return;
-      }
-      setOrderStatus(`Order ${data.order_id} received ($${data.amount} CAD). Orders over $500 need manager approval.`, 'success');
-    } catch (e) {
-      setOrderStatus('Order failed — please try again.', 'error');
-      orderBtn.disabled = false;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'We couldn’t place your order. Please try again.');
+      showSuccess(name, data);
+    } catch (err) {
+      setMessage(orderStatus, err.message, 'error');
+      orderBtn.textContent = 'Place order';
+      window.updateOrderButton();
     }
   });
+
+  function showSuccess(name, data) {
+    document.getElementById('order-success-title').textContent = `Thank you, ${name}!`;
+    document.getElementById('order-number').textContent = data.order_id;
+    document.getElementById('order-success-text').textContent = data.amount > APPROVAL_THRESHOLD
+      ? `Your total is $${data.amount} CAD. Because it’s over $${APPROVAL_THRESHOLD}, a manager will review it before it goes to print. We’ll be in touch soon.`
+      : `Your total is $${data.amount} CAD. Your order is on its way to production.`;
+    form.hidden = true;
+    const card = document.getElementById('order-success');
+    card.hidden = false;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 </script>
 {% endif %}
 {% endblock %}
