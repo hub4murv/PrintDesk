@@ -17,12 +17,13 @@ if os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"):
     from azure.monitor.opentelemetry import configure_azure_monitor
     configure_azure_monitor()
 
-import requests
 import io
 import json
 import logging
 import uuid
 from datetime import datetime, timezone
+import requests
+
 
 from flask import Flask, abort, jsonify, render_template, request, send_file
 
@@ -164,11 +165,26 @@ def staff_download(token):
     )
 
 
+def _json_body():
+    """Request JSON as a dict. Anything else (a list, a string, invalid JSON) becomes {}."""
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+
+def _pick(options, choice):
+    """Look up an option sent by the browser.
+
+    Lists, objects and other non-string values are treated as "not found" instead of
+    crashing the dict lookup (a TypeError would turn a bad request into a 500).
+    """
+    return options.get(choice) if isinstance(choice, str) else None
+
+
 @app.route("/api/price", methods=["POST"])
 def calculate_price():
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
     key = data.get("key")
-    product = PRODUCTS.get(key)
+    product = _pick(PRODUCTS, key)
     if not product:
         logger.warning("Price requested for unknown product: %s", key)
         return jsonify({"error": "Unknown product."}), 400
@@ -182,13 +198,13 @@ def calculate_price():
 
 @app.route("/api/order", methods=["POST"])
 def place_order():
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
 
     customer_name = str(data.get("customer_name") or "").strip()
     if not customer_name or len(customer_name) > 100:
         return jsonify({"error": "Please enter your name or company (up to 100 characters)."}), 400
 
-    product = PRODUCTS.get(data.get("key"))
+    product = _pick(PRODUCTS, data.get("key"))
     handler = _HANDLERS.get(product["pricing_type"]) if product else None
     if not handler:
         return jsonify({"error": "This product can't be ordered online."}), 400
@@ -228,7 +244,7 @@ def _not_confirmed():
 
 def _price_tiered_multi_variant(product, data):
     variant_key = data.get("variant")
-    variant = product["variants"].get(variant_key)
+    variant = _pick(product["variants"], variant_key)
     if not variant:
         return jsonify({"error": "Please choose a stock."}), 400
 
@@ -236,7 +252,7 @@ def _price_tiered_multi_variant(product, data):
     sides = data.get("sides")
 
     if "sides_pricing" in variant:
-        table = variant["sides_pricing"].get(sides)
+        table = _pick(variant["sides_pricing"], sides)
         if table is None:
             return jsonify({"error": "Please choose a print side."}), 400
     else:
@@ -267,7 +283,7 @@ def _price_tiered_simple(product, data):
 
     if "sides_options" in product:
         sides = data.get("sides")
-        option = product["sides_options"].get(sides)
+        option = _pick(product["sides_options"], sides)
         if not option:
             return jsonify({"error": "Please choose a print side."}), 400
         table = option["pricing"]
@@ -281,22 +297,53 @@ def _price_tiered_simple(product, data):
     return jsonify({"price": price, "currency": "CAD", "note": "plus GST"})
 
 
+MAX_UNITS_PER_ORDER = 100
+
+
+def _parse_units(data):
+    """Quantity for products priced per piece (or per set). Defaults to 1.
+
+    Returns None when the value isn't a whole number from 1 to MAX_UNITS_PER_ORDER.
+    """
+    raw = data.get("qty")
+    if raw is None or raw == "":
+        return 1
+    try:
+        units = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return units if 1 <= units <= MAX_UNITS_PER_ORDER else None
+
+
+def _invalid_units():
+    return jsonify({
+        "error": f"Please enter a quantity from 1 to {MAX_UNITS_PER_ORDER}."
+    }), 400
+
+
 def _price_fixed_qty_variant(product, data):
     variant_key = data.get("variant")
-    variant = product["variants"].get(variant_key)
+    variant = _pick(product["variants"], variant_key)
     if not variant:
         return jsonify({"error": "Please choose an option."}), 400
 
+    sets = _parse_units(data)
+    if sets is None:
+        return _invalid_units()
+
+    fixed_qty = product["fixed_qty"]
     return jsonify({
-        "price": variant["price"],
+        "price": round(variant["price"] * sets, 2),
+        "unit_price": variant["price"],
+        "qty": sets,
         "currency": "CAD",
-        "note": f"plus GST, for {product['fixed_qty']} units",
+        "note": f"plus GST, {sets * fixed_qty} units ({sets} × {fixed_qty})",
     })
 
 
 def _price_per_unit_min_qty(product, data):
     size = data.get("size")
-    unit_price = product["size_unit_price"].get(size)
+    unit_price = _pick(product["size_unit_price"], size)
     if unit_price is None:
         return jsonify({"error": "Please choose a size."}), 400
 
@@ -319,28 +366,44 @@ def _price_per_unit_min_qty(product, data):
 
 
 def _price_fixed_price(product, data):
-    total = product["price"]
+    units = _parse_units(data)
+    if units is None:
+        return _invalid_units()
+
+    total = product["price"] * units
     addon_applied = False
     addon = product.get("addon_fee")
     if addon and data.get(addon["key"]):
-        total += addon["amount"]
+        total += addon["amount"]  # one-time fee per order, not per unit
         addon_applied = True
 
     return jsonify({
-        "price": total,
+        "price": round(total, 2),
+        "unit_price": product["price"],
+        "qty": units,
         "addon_applied": addon_applied,
         "currency": "CAD",
-        "note": "plus GST",
+        "note": "plus GST" + (", setup fee charged once per order" if addon_applied else ""),
     })
 
 
 def _price_variant_fixed_price(product, data):
     variant_key = data.get("variant")
-    variant = product["variants"].get(variant_key)
+    variant = _pick(product["variants"], variant_key)
     if not variant:
         return jsonify({"error": "Please choose an option."}), 400
 
-    return jsonify({"price": variant["price"], "currency": "CAD", "note": "plus GST"})
+    units = _parse_units(data)
+    if units is None:
+        return _invalid_units()
+
+    return jsonify({
+        "price": round(variant["price"] * units, 2),
+        "unit_price": variant["price"],
+        "qty": units,
+        "currency": "CAD",
+        "note": "plus GST",
+    })
 
 
 _HANDLERS = {
