@@ -3,6 +3,5 @@ itsdangerous==2.2.0
 gunicorn==23.0.0
 azure-monitor-opentelemetry==1.8.12
 requests==2.34.2
-# boto3 is only imported when STORAGE_BACKEND=r2 (see uploads.py) -- install
-# it once R2 credentials exist. Not required for the default local backend.
-# boto3==1.35.0
+azure-identity==1.27.0
+azure-storage-blob==12.31.1

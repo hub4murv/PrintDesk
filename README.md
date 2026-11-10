@@ -56,8 +56,12 @@ Open <http://127.0.0.1:5000>.
 | --- | --- | --- |
 | `FLASK_DEBUG` | off | Set to `1` to enable debug mode — local development only. |
 | `SECRET_KEY` | dev-only placeholder | Signs staff download links. Set a real value for any deployment. |
-| `STORAGE_BACKEND` | `local` | Where uploaded files are stored. |
+| `STORAGE_BACKEND` | `local` | `local` (server disk, for development) or `azure` (Blob Storage). |
 | `UPLOAD_DIR` | `uploads_private/` | Folder for uploads with the local backend. |
+| `AZURE_STORAGE_ACCOUNT_URL` | — | Blob endpoint, e.g. `https://<account>.blob.core.windows.net`. Access uses managed identity, no keys. |
+| `AZURE_STORAGE_CONTAINER` | `designs` | Private container for customer designs. |
+| `FLOW_ORDER_URL` | — | Power Automate HTTP trigger URL. Secret: treat it like a password. |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | — | Enables Application Insights monitoring. |
 
 ### Optional images
 
