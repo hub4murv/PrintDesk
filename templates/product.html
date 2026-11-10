@@ -42,11 +42,13 @@
         const uploadNote = document.getElementById('upload-note');
 
         if (data.error) {
+          window.lastPricePayload = null;
           valueEl.textContent = '—';
           noteEl.textContent = '';
           errorEl.textContent = data.error;
           if (uploadBtn) uploadBtn.disabled = true;
         } else {
+          window.lastPricePayload = payload;
           valueEl.textContent = `$${data.price} CAD`;
           noteEl.textContent = data.note || '';
           errorEl.textContent = '';
@@ -342,6 +344,12 @@
 
       <div class="upload-note" id="upload-note">Choose your options above before uploading your design.</div>
       <button class="btn-primary" id="upload-btn" disabled>Upload design &amp; continue</button>
+        <div class="field" id="order-section" hidden>
+        <label class="field-label" for="customer-name">Your name or company</label>
+        <input type="text" id="customer-name" maxlength="100" autocomplete="organization">
+        <button class="btn-primary" id="order-btn">Place order</button>
+        <div class="upload-status" id="order-status"></div>
+      </div>
     {% endif %}
   </div>
 </div>
@@ -388,12 +396,46 @@
       uploadBtn.classList.add('btn-success');
       uploadBtn.textContent = 'Design uploaded ✓';
       setUploadStatus(
-        `Uploaded "${data.filename}" (${Math.ceil(data.size / 1024)} KB). Checkout comes in the next build step.`,
+        `Uploaded "${data.filename}" (${Math.ceil(data.size / 1024)} KB). Now enter your name and place the order.`,
         'success'
       );
+      document.getElementById('order-section').hidden = false;
     } catch (e) {
       setUploadStatus('Upload failed — please try again.', 'error');
       uploadBtn.disabled = false;
+    }
+  });
+    const orderBtn = document.getElementById('order-btn');
+  const orderStatus = document.getElementById('order-status');
+
+  function setOrderStatus(message, kind) {
+    orderStatus.textContent = message;
+    orderStatus.className = 'upload-status' + (kind ? ' ' + kind : '');
+  }
+
+  orderBtn.addEventListener('click', async () => {
+    const name = document.getElementById('customer-name').value.trim();
+    if (!name) { setOrderStatus('Please enter your name or company.', 'error'); return; }
+    if (!window.lastPricePayload) { setOrderStatus('Please choose your options first.', 'error'); return; }
+
+    orderBtn.disabled = true;
+    setOrderStatus('Placing your order…');
+    try {
+      const res = await fetch('/api/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...window.lastPricePayload, customer_name: name }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setOrderStatus(data.error || 'Order failed.', 'error');
+        orderBtn.disabled = false;
+        return;
+      }
+      setOrderStatus(`Order ${data.order_id} received ($${data.amount} CAD). Orders over $500 need manager approval.`, 'success');
+    } catch (e) {
+      setOrderStatus('Order failed — please try again.', 'error');
+      orderBtn.disabled = false;
     }
   });
 </script>
