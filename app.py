@@ -17,6 +17,7 @@ if os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"):
     from azure.monitor.opentelemetry import configure_azure_monitor
     configure_azure_monitor()
 
+import requests
 import io
 import json
 import logging
@@ -50,6 +51,7 @@ with open(PRODUCTS_PATH, encoding="utf-8") as f:
 
 storage = build_storage(app)
 
+FLOW_ORDER_URL = os.environ.get("FLOW_ORDER_URL")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 LOGO_FILE = "images/logo.svg"
 PRODUCT_IMAGE_DIR = "images/products"
@@ -177,6 +179,45 @@ def calculate_price():
         return jsonify({"error": "This product isn't available for online ordering yet."}), 400
 
     return handler(product, data)
+
+@app.route("/api/order", methods=["POST"])
+def place_order():
+    data = request.get_json(silent=True) or {}
+
+    customer_name = str(data.get("customer_name") or "").strip()
+    if not customer_name or len(customer_name) > 100:
+        return jsonify({"error": "Please enter your name or company (up to 100 characters)."}), 400
+
+    product = PRODUCTS.get(data.get("key"))
+    handler = _HANDLERS.get(product["pricing_type"]) if product else None
+    if not handler:
+        return jsonify({"error": "This product can't be ordered online."}), 400
+
+    # Recalculate the price on the server. Never trust a price sent by the browser.
+    result = handler(product, data)
+    if isinstance(result, tuple):  # (response, 400) means the options are invalid
+        return result
+    amount = result.get_json()["price"]
+
+    if not FLOW_ORDER_URL:
+        logger.warning("FLOW_ORDER_URL is not set; online ordering is disabled")
+        return jsonify({"error": "Online ordering is not available right now."}), 503
+
+    order_id = uuid.uuid4().hex[:8].upper()
+    payload = {
+        "order_id": order_id,
+        "customer_name": customer_name,
+        "product": product["category"],
+        "amount": amount,
+    }
+    try:
+        response = requests.post(FLOW_ORDER_URL, json=payload, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException:
+        logger.exception("Could not send order %s to Power Automate", order_id)
+        return jsonify({"error": "We couldn't place your order. Please try again."}), 502
+
+    return jsonify({"order_id": order_id, "amount": amount, "status": "received"}), 202
 
 
 def _not_confirmed():
