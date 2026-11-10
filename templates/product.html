@@ -226,15 +226,26 @@
           {% endfor %}
         </div>
       </div>
+      <div class="field">
+        <label class="field-label" for="qty-input">Quantity (sets of {{ product.fixed_qty }})</label>
+        <input type="number" id="qty-input" value="1" min="1" max="100" step="1">
+      </div>
       <script>
         const KEY = "{{ key }}";
+        let selectedVariant = null;
         document.querySelectorAll('#variant-options .swatch-btn').forEach(btn => {
           btn.addEventListener('click', () => {
             document.querySelectorAll('#variant-options .swatch-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            postPrice({ key: KEY, variant: btn.dataset.variant });
+            selectedVariant = btn.dataset.variant;
+            updatePrice();
           });
         });
+        document.getElementById('qty-input').addEventListener('input', updatePrice);
+        function updatePrice() {
+          if (!selectedVariant) return;
+          postPrice({ key: KEY, variant: selectedVariant, qty: document.getElementById('qty-input').value });
+        }
       </script>
 
     {# ---------------- per_unit_min_qty : Posters ---------------- #}
@@ -271,6 +282,10 @@
 
     {# ---------------- fixed_price : Pull-Up Banner, A-Frame, Vehicle Magnets ---------------- #}
     {% elif product.pricing_type == 'fixed_price' %}
+      <div class="field">
+        <label class="field-label" for="qty-input">Quantity</label>
+        <input type="number" id="qty-input" value="1" min="1" max="100" step="1">
+      </div>
       {% if product.addon_fee %}
       <div class="field">
         <div class="checkbox-row">
@@ -282,13 +297,14 @@
       <script>
         const KEY = "{{ key }}";
         function updatePrice() {
-          const payload = { key: KEY };
+          const payload = { key: KEY, qty: document.getElementById('qty-input').value };
           const addonEl = document.getElementById('addon-fee');
           if (addonEl) payload[addonEl.dataset.addonKey] = addonEl.checked;
           postPrice(payload);
         }
         const addonEl = document.getElementById('addon-fee');
         if (addonEl) addonEl.addEventListener('change', updatePrice);
+        document.getElementById('qty-input').addEventListener('input', updatePrice);
         updatePrice();
       </script>
 
@@ -302,15 +318,26 @@
           {% endfor %}
         </div>
       </div>
+      <div class="field">
+        <label class="field-label" for="qty-input">Quantity</label>
+        <input type="number" id="qty-input" value="1" min="1" max="100" step="1">
+      </div>
       <script>
         const KEY = "{{ key }}";
+        let selectedVariant = null;
         document.querySelectorAll('#variant-options .swatch-btn').forEach(btn => {
           btn.addEventListener('click', () => {
             document.querySelectorAll('#variant-options .swatch-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            postPrice({ key: KEY, variant: btn.dataset.variant });
+            selectedVariant = btn.dataset.variant;
+            updatePrice();
           });
         });
+        document.getElementById('qty-input').addEventListener('input', updatePrice);
+        function updatePrice() {
+          if (!selectedVariant) return;
+          postPrice({ key: KEY, variant: selectedVariant, qty: document.getElementById('qty-input').value });
+        }
       </script>
     {% endif %}
 
