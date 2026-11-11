@@ -20,10 +20,11 @@ notice visible on the site.
 - Dependencies are deliberately minimal (`requirements.txt`). Don't add
   frameworks or libraries unless explicitly asked.
 
-## Things the maintainer will add himself (as part of the learning track)
-Do NOT add these unless explicitly asked: tests, gunicorn, GitHub Actions
-workflows, Azure configuration/infrastructure files. Do not run `git init`
-or make commits — the maintainer handles git.
+## Working rules
+- Tests, CI/CD workflow and Azure resources already exist. Keep the test suite
+  green and add tests with every change.
+- Don't change `.github/workflows/` or Azure infrastructure unless asked.
+- Don't commit or push; the maintainer handles git.
 
 ## Architecture
 - `products.json` — the catalog (17 items). Each product has a
@@ -53,7 +54,7 @@ or make commits — the maintainer handles git.
   accents on hover, cyan accent, Space Grotesk (display) + Inter (body).
 - Debug mode is read from `FLASK_DEBUG` and is **off by default**.
 
-## File upload (implemented, local-disk only for now)
+## File upload
 - `uploads.py` — validation + storage abstraction, used by `app.py`'s
   `/api/upload` (multipart POST: `key` + `file`) and
   `/staff/uploads/<token>` (signed download route).
@@ -61,9 +62,13 @@ or make commits — the maintainer handles git.
   - `LocalDiskStorage` (default) — writes to `uploads_private/`, outside
     `static/`, so nothing is directly web-reachable. Retrieval only through
     a short-lived signed token (`itsdangerous.URLSafeTimedSerializer`).
-  - `R2Storage` — legacy Cloudflare R2 implementation, inactive. Per the
-    roadmap it is to be replaced by an Azure Blob Storage backend
-    implementing the same interface.
+  - `AzureBlobStorage` (production, `STORAGE_BACKEND=azure`) — private
+    container, accessed with the App Service managed identity via
+    `DefaultAzureCredential`. Shared-key access is disabled on the account.
+    Staff links are read-only user delegation SAS URLs (max 7 days; orders use 6).
+- The browser gets `file_id` (the storage key) after upload and sends it with
+  the order; `/api/order` checks its exact format and that the file exists.
+- Never log signed links: a SAS URL is a credential.
 
 ### Upload threat model (keep these protections in any new backend)
 - **File-type spoofing** — extension whitelist (pdf/jpg/jpeg/png/ai/eps/
@@ -91,24 +96,20 @@ or make commits — the maintainer handles git.
   the demo. Before going live, consider disabling uploads in the public
   demo or adding rate limiting + automatic cleanup.
 
-## Roadmap
-1. **File upload → Azure Blob Storage**: an `AzureBlobStorage` backend
-   behind the existing `Storage` interface. Private container, no public
-   access; staff downloads via short-lived SAS URLs. Keep every protection
-   from the threat model above.
-2. **Stripe Checkout (test mode)**: price computed server-side from
-   `products.json` (never trust a client-sent price), upload reference
-   attached to the checkout session.
-3. **Order hand-off → Power Automate**: after successful payment (Stripe
-   webhook, signature-verified), POST the order details + SAS link to a
-   Power Automate HTTP-triggered flow (e.g. notify staff, log the order).
-4. **Monitoring → Application Insights**: request/error telemetry and
-   custom events (price calculated, upload accepted/rejected, order paid).
-5. **Deployment → Azure App Service via GitHub Actions**: CI/CD pipeline,
-   secrets in App Service configuration / GitHub secrets — never in code.
+## Done
+Azure App Service hosting, GitHub Actions CI/CD with OIDC, Application
+Insights (OpenTelemetry), Azure Blob Storage with managed identity, order
+hand-off to a Power Automate HTTP-triggered flow (Dataverse, approvals,
+Teams), quantity for per-item products.
+
+## Next
+1. Antivirus scanning via a blob-triggered Azure Function.
+2. Rate limiting on `/api/upload` and `/api/order` (public demo).
+3. Staff page (Entra ID sign-in) that issues fresh design links.
+4. Single source for the $500 approval threshold.
+5. Stripe Checkout (test mode): price computed server-side, never from the client.
 
 ## Known gaps
-- No order/database model yet — each upload is a standalone file + JSON
-  sidecar metadata, not tied to an order record.
 - `app.secret_key` falls back to a dev-only default; a real `SECRET_KEY`
   env var is required for any deployment.
+- Retention: designs are deleted after 90 days by a storage lifecycle policy.
